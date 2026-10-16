@@ -89,3 +89,51 @@ jobs:
           name: gitleaks-report
           path: gitleaks-report.json
           retention-days: 7
+
+  container_build:
+    name: container_build
+    runs-on: ubuntu-latest
+    needs: [lint, tests, sonarcloud, dependency_audit, secret_detection]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Définir IMAGE_TAG
+        run: echo "IMAGE_TAG=securedesk:${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+      - run: docker build --pull --tag "$IMAGE_TAG" .
+      - run: docker save "$IMAGE_TAG" --output securedesk-image.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: securedesk-image
+          path: securedesk-image.tar
+          retention-days: 1
+
+  container_scan:
+    name: container_scan
+    runs-on: ubuntu-latest
+    needs: container_build
+    env:
+      TRIVY_CACHE_DIR: .trivycache
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: securedesk-image
+      - uses: actions/cache@v4
+        with:
+          path: .trivycache
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: trivy-db-
+      - name: Rapport JSON
+        run: >
+          docker run --rm -v "$PWD:/work" -w /work -e TRIVY_CACHE_DIR
+          aquasec/trivy:0.74.0 image --input securedesk-image.tar
+          --format json --output trivy-report.json
+      - name: Bloquer les critiques corrigibles
+        run: >
+          docker run --rm -v "$PWD:/work" -w /work -e TRIVY_CACHE_DIR
+          aquasec/trivy:0.74.0 image --input securedesk-image.tar
+          --severity CRITICAL --ignore-unfixed --exit-code 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          retention-days: 7
