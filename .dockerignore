@@ -1,0 +1,8 @@
+# .dockerignore
+node_modules
+coverage
+.git
+.github
+.env*
+docs
+test
