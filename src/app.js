@@ -26,3 +26,4 @@ app.post("/incidents", (req, res) => {
   incidents.push(incident);
   return res.status(201).json(incident);
 });
+var inutile = 1 == 1;
